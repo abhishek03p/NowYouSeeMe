@@ -11,7 +11,8 @@ class WebRTCClient {
         this.ws = null;
         this.meetingId = null;
         this.userId = this.generateUserId();
-        this.signalingServerUrl = 'ws://' + window.location.host + '/ws/signaling';
+        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signaling";
 
         // STUN servers for NAT traversal
         this.iceServers = [
