@@ -1,0 +1,247 @@
+╔════════════════════════════════════════════════════════════════════╗
+║               QUICK REFERENCE - START & STOP APP                    ║
+║                 Now You See Me - Video Calling                      ║
+╚════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 QUICK START (Most Used)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: Open Terminal
+┌─────────────────────────────────────────────────────────────┐
+│ $ cd /home/abhishek/Documents/Git/NowYouSeeMe/nowyouseeme   │
+└─────────────────────────────────────────────────────────────┘
+
+STEP 2: Start Server
+┌─────────────────────────────────────────────────────────────┐
+│ $ mvn spring-boot:run                                       │
+│                                                             │
+│ Wait for:                                                   │
+│ "Started NowyouseemeApplication in X seconds"             │
+└─────────────────────────────────────────────────────────────┘
+
+STEP 3: Open Browser
+┌─────────────────────────────────────────────────────────────┐
+│ http://localhost:8080                                       │
+└─────────────────────────────────────────────────────────────┘
+
+STEP 4: Stop Server (When Done)
+┌─────────────────────────────────────────────────────────────┐
+│ Press: Ctrl + C                                             │
+│                                                             │
+│ Wait for: "Shutting down..."                               │
+└─────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚡ ONE-LINER COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ START
+└─ mvn spring-boot:run
+
+✅ STOP
+└─ Ctrl + C
+
+✅ BUILD JAR
+└─ mvn clean package -DskipTests
+
+✅ RUN JAR
+└─ java -jar target/nowyouseeme-0.0.1-SNAPSHOT.jar
+
+✅ CHECK IF RUNNING
+└─ curl http://localhost:8080
+
+✅ TEST API
+└─ curl -X POST http://localhost:8080/api/meetings/create
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔥 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ Port 8080 Already in Use
+   ✓ Find:  lsof -i :8080
+   ✓ Kill:  kill -9 <PID>
+   ✓ Or:    mvn spring-boot:run --server.port=3000
+
+❌ Java Not Found
+   ✓ Check: java -version
+   ✓ Need:  Java 17+
+
+❌ Maven Not Found
+   ✓ Check: mvn -version
+   ✓ Use:   ./mvnw spring-boot:run
+
+❌ App Won't Start
+   ✓ Clean: mvn clean compile
+   ✓ Check: console output for errors
+
+❌ Can't Stop with Ctrl+C
+   ✓ Kill:  lsof -ti:8080 | xargs kill -9
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 FULL WORKFLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Complete Flow with Testing:
+
+1️⃣  cd /home/abhishek/Documents/Git/NowYouSeeMe/nowyouseeme
+
+2️⃣  mvn spring-boot:run
+
+     Waits for "Started NowyouseemeApplication" ✓
+
+3️⃣  (Open NEW TERMINAL)
+
+4️⃣  curl -X POST http://localhost:8080/api/meetings/create
+     Should return: {"meetingId":"ABC12345"}
+
+5️⃣  open http://localhost:8080
+     OR: firefox http://localhost:8080
+     OR: google-chrome http://localhost:8080
+
+6️⃣  Test the app:
+     • Click Copy Link
+     • Open link in another browser
+     • See both videos appear
+     • Test audio/video controls
+     • Send chat messages
+
+7️⃣  Close browser tabs
+
+8️⃣  Back to original terminal: Press Ctrl + C
+
+9️⃣  Wait for: "Shutting down..."
+
+✅ Done!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 COMMAND CHEAT SHEET
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STARTING:
+├─ mvn spring-boot:run              → Start with Maven
+├─ java -jar target/*.jar           → Start pre-built JAR
+├─ mvn spring-boot:run &            → Start in background
+└─ mvn spring-boot:run -D...=3000   → Custom port 3000
+
+STOPPING:
+├─ Ctrl + C                         → Normal stop
+├─ kill -9 <PID>                   → Force kill by PID
+├─ pkill -f NowyouseemeApplication  → Kill by name
+├─ lsof -ti:8080 | xargs kill -9   → Kill by port
+└─ killall java                    → Kill all Java
+
+BUILDING:
+├─ mvn clean compile                → Compile
+├─ mvn clean package                → Build JAR
+├─ mvn clean package -DskipTests    → Skip tests
+└─ mvn dependency:resolve           → Download deps
+
+CHECKING:
+├─ curl http://localhost:8080       → Test if running
+├─ lsof -i :8080                   → Show port users
+├─ ps aux | grep java              → List Java processes
+├─ java -version                    → Check Java version
+└─ mvn -version                     → Check Maven version
+
+CUSTOM PORTS:
+├─ mvn spring-boot:run -Dspring-boot.run.arguments="--server.port=3000"
+├─ java -Dserver.port=3000 -jar target/*.jar
+└─ export SERVER_PORT=3000; mvn spring-boot:run
+
+LOGGING:
+├─ mvn spring-boot:run -X           → Debug mode
+├─ mvn spring-boot:run -e           → Show errors
+└─ mvn spring-boot:run -q           → Quiet mode
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📱 VERIFY IT'S WORKING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Browser Test
+  → Open http://localhost:8080
+  → Should show video calling interface
+
+✓ cURL Test
+  → curl http://localhost:8080
+  → Should return HTML
+
+✓ API Test
+  → curl -X POST http://localhost:8080/api/meetings/create
+  → Should return {"meetingId":"..."}
+
+✓ Port Test
+  → lsof -i :8080
+  → Should show Java process listening
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️ TIME EXPECTATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+First Time:
+├─ Download dependencies: 30-60 seconds
+├─ Build project: 20-30 seconds
+├─ Start server: 15-20 seconds
+└─ Total: ~90 seconds
+
+Subsequent Times:
+├─ Build: 5-10 seconds
+├─ Start: 5-10 seconds
+└─ Total: ~15 seconds
+
+Development:
+├─ Change code
+├─ mvn spring-boot:run (detects & reloads)
+└─ Refresh browser to see changes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎮 KEYBOARD SHORTCUTS (While Using App)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+V      → Toggle Video On/Off
+A      → Toggle Audio (Mute/Unmute)
+Q      → End Call
+Enter  → Send Chat Message
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🆘 EMERGENCY COMMANDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Kill All Java Processes:
+└─ killall -9 java
+
+Free Port 8080:
+├─ lsof -ti:8080 | xargs kill -9
+└─ OR: lsof -i :8080 (find PID) → kill -9 <PID>
+
+Clean Everything and Start Fresh:
+└─ mvn clean package -DskipTests && java -jar target/*.jar
+
+Force Rebuild Dependencies:
+└─ mvn clean dependency:resolve compile package
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📚 FOR MORE HELP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Quick Start:       → QUICKSTART.md
+Detailed Help:     → START_STOP.md (complete guide)
+Full Info:         → README.md
+Troubleshooting:   → FAQ.md
+Features:          → FEATURES.md
+Production:        → DEPLOYMENT.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ TLDR - JUST DO THIS:
+
+   $ cd ~/Documents/Git/NowYouSeeMe/nowyouseeme
+   $ mvn spring-boot:run
+   $ open http://localhost:8080
+
+   (When done: Press Ctrl+C)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Happy video calling! 📹🎉
+
