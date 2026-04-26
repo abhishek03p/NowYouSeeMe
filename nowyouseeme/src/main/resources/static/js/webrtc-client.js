@@ -334,7 +334,7 @@ class WebRTCClient {
 
     showNotification(message, type = 'info') {
         const n = document.createElement('div');
-        n.className = 'notification';
+        n.className = `notification ${type}`;
         n.textContent = message;
         document.body.appendChild(n);
         setTimeout(() => n.remove(), 3000);
