@@ -23,6 +23,9 @@ class WebRTCClient {
         this.videoEnabled = true;
         this.audioEnabled = true;
         this.isInitialized = false;
+        this.joinApproved = false;
+        this.isHost = false;
+        this.pendingJoinRequests = new Set();
     }
 
     generateUserId() {
@@ -113,7 +116,14 @@ class WebRTCClient {
         if (message.from === this.userId && message.type !== 'existing-users') return;
 
         switch (message.type) {
+            case 'join-approved': this.handleJoinApproved(message); break;
+            case 'lobby-waiting': this.handleLobbyWaiting(); break;
+            case 'join-request': this.handleJoinRequest(message); break;
+            case 'join-rejected': this.handleJoinRejected(); break;
             case 'existing-users': this.handleExistingUsers(message); break;
+            case 'user-joined':
+                this.showNotification('A participant joined the meeting', 'info');
+                break;
             case 'offer': this.handleOffer(message); break;
             case 'answer': this.handleAnswer(message); break;
             case 'ice-candidate': this.handleIceCandidate(message); break;
@@ -126,7 +136,50 @@ class WebRTCClient {
         }
     }
 
+    handleJoinApproved(message) {
+        this.joinApproved = true;
+        try {
+            const payload = message.data ? JSON.parse(message.data) : {};
+            this.isHost = Boolean(payload.isHost);
+        } catch (e) {
+            this.isHost = false;
+        }
+        this.hideLobbyWaiting();
+        this.updateHostControls();
+        this.showNotification(this.isHost ? 'You are the host' : 'Joined meeting', 'success');
+    }
+
+    handleLobbyWaiting() {
+        this.joinApproved = false;
+        this.showLobbyWaiting();
+    }
+
+    handleJoinRequest(message) {
+        if (!this.isHost) {
+            return;
+        }
+
+        const requesterId = message.from;
+        if (!requesterId) {
+            return;
+        }
+        this.pendingJoinRequests.add(requesterId);
+        this.updateHostControls();
+        this.showNotification(`Join request: ${this.displayName(requesterId)}`, 'info');
+    }
+
+    handleJoinRejected() {
+        this.showNotification('Host did not admit your request', 'error');
+        this.hideLobbyWaiting();
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1500);
+    }
+
     handleExistingUsers(message) {
+        if (!this.joinApproved) {
+            return;
+        }
         const users = JSON.parse(message.data);
         users.forEach(userId => {
             if (userId !== this.userId && !this.peerConnections.has(userId)) {
@@ -307,9 +360,102 @@ class WebRTCClient {
 
     handleUserLeft(message) {
         const userId = message.from;
+        this.pendingJoinRequests.delete(userId);
+        this.updateHostControls();
         this.closePeerConnection(userId);
         const el = document.getElementById('video-' + userId);
         if (el) el.remove();
+    }
+
+    displayName(userId) {
+        return 'User-' + userId.substr(5, 4);
+    }
+
+    showLobbyWaiting() {
+        const lobby = document.getElementById('lobbyWaiting');
+        if (lobby) {
+            lobby.style.display = 'flex';
+        }
+    }
+
+    hideLobbyWaiting() {
+        const lobby = document.getElementById('lobbyWaiting');
+        if (lobby) {
+            lobby.style.display = 'none';
+        }
+    }
+
+    updateHostControls() {
+        const hostPanel = document.getElementById('hostLobbyPanel');
+        const list = document.getElementById('hostPendingList');
+        if (!hostPanel || !list) {
+            return;
+        }
+
+        if (!this.isHost) {
+            hostPanel.style.display = 'none';
+            return;
+        }
+
+        hostPanel.style.display = 'block';
+        list.innerHTML = '';
+
+        if (this.pendingJoinRequests.size === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'host-empty';
+            empty.textContent = 'No pending requests';
+            list.appendChild(empty);
+            return;
+        }
+
+        this.pendingJoinRequests.forEach((userId) => {
+            const row = document.createElement('div');
+            row.className = 'host-request-item';
+
+            const name = document.createElement('span');
+            name.textContent = this.displayName(userId);
+            row.appendChild(name);
+
+            const actions = document.createElement('div');
+            actions.className = 'host-request-actions';
+
+            const allow = document.createElement('button');
+            allow.className = 'host-action-btn allow';
+            allow.textContent = 'Admit';
+            allow.onclick = () => this.admitUser(userId);
+
+            const deny = document.createElement('button');
+            deny.className = 'host-action-btn deny';
+            deny.textContent = 'Reject';
+            deny.onclick = () => this.rejectUser(userId);
+
+            actions.appendChild(allow);
+            actions.appendChild(deny);
+            row.appendChild(actions);
+            list.appendChild(row);
+        });
+    }
+
+    admitUser(userId) {
+        this.sendSignalingMessage({
+            type: 'admit-user',
+            meetingId: this.meetingId,
+            from: this.userId,
+            to: userId
+        });
+        this.pendingJoinRequests.delete(userId);
+        this.updateHostControls();
+    }
+
+    rejectUser(userId) {
+        this.sendSignalingMessage({
+            type: 'reject-user',
+            meetingId: this.meetingId,
+            from: this.userId,
+            to: userId
+        });
+        this.pendingJoinRequests.delete(userId);
+        this.updateHostControls();
     }
 
     closePeerConnection(userId) {

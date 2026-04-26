@@ -9,6 +9,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,12 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
 
     // Map to track which user is in which meeting
     private static final Map<String, String> userMeetingMap = new ConcurrentHashMap<>();
+
+    // Map of meeting ID to host user ID
+    private static final Map<String, String> meetingHosts = new ConcurrentHashMap<>();
+
+    // Map of meeting ID to pending user IDs waiting in lobby
+    private static final Map<String, Set<String>> pendingUsers = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -49,6 +56,10 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
                 case "chat":
                     broadcastToMeeting(msg);
                     break;
+                case "admit-user":
+                case "reject-user":
+                    handleLobbyDecision(msg);
+                    break;
             }
         } catch (Exception e) {
             System.err.println("Error handling WebSocket message: " + e.getMessage());
@@ -62,37 +73,117 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
 
         // Store the session
         userSessions.put(userId, session);
-        userMeetingMap.put(userId, meetingId);
+        String hostUserId = meetingHosts.get(meetingId);
 
-        // Add user to meeting
-        meetingUsers.computeIfAbsent(meetingId, k -> ConcurrentHashMap.newKeySet())
-                    .add(userId);
+        // First participant becomes host and is auto-approved.
+        if (hostUserId == null) {
+            meetingHosts.put(meetingId, userId);
+            addApprovedUserToMeeting(meetingId, userId);
+            sendJoinApproved(userId, meetingId, true);
+            sendExistingUsersTo(userId, meetingId);
+            System.out.println("Host " + userId + " started meeting " + meetingId);
+            return;
+        }
 
-        System.out.println("User " + userId + " joined meeting " + meetingId);
+        // Existing meeting: user waits in lobby until host approves.
+        pendingUsers.computeIfAbsent(meetingId, k -> ConcurrentHashMap.newKeySet()).add(userId);
+        sendLobbyWaiting(userId, meetingId);
+        sendJoinRequestToHost(hostUserId, userId, meetingId);
+        System.out.println("User " + userId + " waiting in lobby for meeting " + meetingId);
+    }
 
-        // Send existing participants list to the new user ONLY
-        // We exclude the user's own ID from the list
-        Set<String> participants = meetingUsers.get(meetingId);
-        if (participants != null) {
-            Set<String> others = ConcurrentHashMap.newKeySet();
-            others.addAll(participants);
-            others.remove(userId);
+    private void handleLobbyDecision(SignalingMessage msg) throws IOException {
+        String meetingId = msg.getMeetingId();
+        String hostId = msg.getFrom();
+        String pendingUserId = msg.getTo();
 
-            SignalingMessage existingUsers = new SignalingMessage();
-            existingUsers.setType("existing-users");
-            existingUsers.setData(gson.toJson(others));
-            existingUsers.setMeetingId(meetingId);
-            existingUsers.setFrom("server");
+        if (meetingId == null || hostId == null || pendingUserId == null) {
+            return;
+        }
 
-            session.sendMessage(new TextMessage(gson.toJson(existingUsers)));
+        String actualHostId = meetingHosts.get(meetingId);
+        if (!hostId.equals(actualHostId)) {
+            return;
+        }
 
-            // Notify others that a new user joined
+        Set<String> waitingUsers = pendingUsers.get(meetingId);
+        if (waitingUsers == null || !waitingUsers.remove(pendingUserId)) {
+            return;
+        }
+
+        if ("admit-user".equals(msg.getType())) {
+            addApprovedUserToMeeting(meetingId, pendingUserId);
+            sendJoinApproved(pendingUserId, meetingId, false);
+            sendExistingUsersTo(pendingUserId, meetingId);
+
             SignalingMessage joinNotif = new SignalingMessage();
             joinNotif.setType("user-joined");
-            joinNotif.setFrom(userId);
+            joinNotif.setFrom(pendingUserId);
             joinNotif.setMeetingId(meetingId);
-            
-            broadcastToMeetingExcept(joinNotif, userId);
+            broadcastToMeetingExcept(joinNotif, pendingUserId);
+        } else {
+            sendJoinRejected(pendingUserId, meetingId);
+        }
+    }
+
+    private void addApprovedUserToMeeting(String meetingId, String userId) {
+        userMeetingMap.put(userId, meetingId);
+        meetingUsers.computeIfAbsent(meetingId, k -> ConcurrentHashMap.newKeySet()).add(userId);
+    }
+
+    private void sendJoinApproved(String userId, String meetingId, boolean isHost) throws IOException {
+        SignalingMessage approved = new SignalingMessage();
+        approved.setType("join-approved");
+        approved.setMeetingId(meetingId);
+        approved.setFrom("server");
+        approved.setData(gson.toJson(Map.of("isHost", isHost)));
+        sendToUser(userId, approved);
+    }
+
+    private void sendLobbyWaiting(String userId, String meetingId) throws IOException {
+        SignalingMessage waiting = new SignalingMessage();
+        waiting.setType("lobby-waiting");
+        waiting.setMeetingId(meetingId);
+        waiting.setFrom("server");
+        sendToUser(userId, waiting);
+    }
+
+    private void sendJoinRequestToHost(String hostUserId, String requesterId, String meetingId) throws IOException {
+        SignalingMessage joinRequest = new SignalingMessage();
+        joinRequest.setType("join-request");
+        joinRequest.setMeetingId(meetingId);
+        joinRequest.setFrom(requesterId);
+        sendToUser(hostUserId, joinRequest);
+    }
+
+    private void sendJoinRejected(String userId, String meetingId) throws IOException {
+        SignalingMessage rejected = new SignalingMessage();
+        rejected.setType("join-rejected");
+        rejected.setMeetingId(meetingId);
+        rejected.setFrom("server");
+        sendToUser(userId, rejected);
+    }
+
+    private void sendExistingUsersTo(String targetUserId, String meetingId) throws IOException {
+        Set<String> participants = meetingUsers.get(meetingId);
+        Set<String> others = new HashSet<>();
+        if (participants != null) {
+            others.addAll(participants);
+            others.remove(targetUserId);
+        }
+
+        SignalingMessage existingUsers = new SignalingMessage();
+        existingUsers.setType("existing-users");
+        existingUsers.setData(gson.toJson(others));
+        existingUsers.setMeetingId(meetingId);
+        existingUsers.setFrom("server");
+        sendToUser(targetUserId, existingUsers);
+    }
+
+    private void sendToUser(String userId, SignalingMessage msg) throws IOException {
+        WebSocketSession targetSession = userSessions.get(userId);
+        if (targetSession != null && targetSession.isOpen()) {
+            targetSession.sendMessage(new TextMessage(gson.toJson(msg)));
         }
     }
 
@@ -149,6 +240,15 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
         }
 
         if (userId != null) {
+            final String disconnectedUserId = userId;
+            // Remove from pending lobby state if user disconnects before approval.
+            pendingUsers.forEach((meetingId, users) -> {
+                users.remove(disconnectedUserId);
+                if (users.isEmpty()) {
+                    pendingUsers.remove(meetingId);
+                }
+            });
+
             String meetingId = userMeetingMap.get(userId);
             if (meetingId != null) {
                 Set<String> participants = meetingUsers.get(meetingId);
@@ -162,6 +262,16 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
 
                     if (participants.isEmpty()) {
                         meetingUsers.remove(meetingId);
+                        meetingHosts.remove(meetingId);
+                    }
+                }
+
+                String currentHost = meetingHosts.get(meetingId);
+                if (userId.equals(currentHost)) {
+                    Set<String> remainingParticipants = meetingUsers.get(meetingId);
+                    if (remainingParticipants != null && !remainingParticipants.isEmpty()) {
+                        String newHostId = remainingParticipants.iterator().next();
+                        meetingHosts.put(meetingId, newHostId);
                     }
                 }
             }
