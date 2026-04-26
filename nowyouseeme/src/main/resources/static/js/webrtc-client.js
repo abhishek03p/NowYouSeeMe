@@ -12,7 +12,7 @@ class WebRTCClient {
         this.meetingId = null;
         this.userId = this.generateUserId();
         const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signaling";
+        this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signaling";
 
         // STUN servers for NAT traversal
         this.iceServers = [
@@ -38,16 +38,16 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
 
     async initialize() {
         try {
-            // Get or create meeting ID
-            await this.getMeetingIdFromUrl();
-
-            // Connect to signaling server
-            await this.connectWebSocket();
-
-            // Get local media stream
+            // 1. Get local media stream first to ensure tracks are ready
             await this.getLocalStream();
 
-            // Join the meeting
+            // 2. Get or create meeting ID
+            await this.getMeetingIdFromUrl();
+
+            // 3. Connect to signaling server
+            await this.connectWebSocket();
+
+            // 4. Join the meeting
             this.joinMeeting();
 
             this.isInitialized = true;
@@ -62,19 +62,15 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
         this.meetingId = params.get('meetingId');
 
         if (!this.meetingId) {
-            // Create new meeting
             const response = await fetch('/api/meetings/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
             const data = await response.json();
             this.meetingId = data.meetingId;
-
-            // Update URL to /meeting with the new ID
             window.history.replaceState({}, '', `/meeting?meetingId=${this.meetingId}`);
         }
 
-        // Update UI safely
         const meetingIdElement = document.getElementById('meetingId');
         if (meetingIdElement) {
             meetingIdElement.textContent = this.meetingId;
@@ -85,12 +81,10 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
         return new Promise((resolve, reject) => {
             try {
                 this.ws = new WebSocket(this.signalingServerUrl);
-
                 this.ws.onopen = () => {
                     console.log('Connected to signaling server');
                     resolve();
                 };
-
                 this.ws.onmessage = (event) => {
                     try {
                         const message = JSON.parse(event.data);
@@ -99,12 +93,10 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
                         console.error('Error parsing signaling message:', e);
                     }
                 };
-
                 this.ws.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     reject(new Error('WebSocket connection failed'));
                 };
-
                 this.ws.onclose = () => {
                     console.log('Disconnected from signaling server');
                     this.showNotification('Connection lost', 'error');
@@ -118,18 +110,9 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
     async getLocalStream() {
         try {
             this.localStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                },
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
+                video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
             });
-
-            // Display local video
             this.displayVideo(this.userId, this.localStream, true);
             console.log('Local stream obtained');
         } catch (error) {
@@ -148,7 +131,10 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
     }
 
     handleSignalingMessage(message) {
-        console.log('Received signaling message:', message.type);
+        // Don't process messages from ourselves (except broadcasted chat if needed, but we handle that locally)
+        if (message.from === this.userId && message.type !== 'existing-users') return;
+
+        console.log('Received signaling message:', message.type, 'from:', message.from);
 
         switch (message.type) {
             case 'user-joined':
@@ -170,47 +156,48 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
                 this.handleUserLeft(message);
                 break;
             case 'chat':
-                this.displayChatMessage(message.from, message.message);
+                if (message.from !== this.userId) {
+                    this.displayChatMessage(message.from, message.message);
+                }
                 break;
         }
     }
 
     handleUserJoined(message) {
         const newUserId = message.from;
-
-        if (newUserId !== this.userId && !this.peerConnections.has(newUserId)) {
+        if (!this.peerConnections.has(newUserId)) {
             console.log('New user joined:', newUserId);
-            this.createPeerConnection(newUserId, true);
-            this.showNotification('User joined', 'info');
+            // The person who just joined will receive 'existing-users' and initiate.
+            // But to be safe, if we are already here, we can also initiate or wait for their offer.
+            // Let's have the NEW joiner initiate connections to everyone.
         }
     }
 
     handleExistingUsers(message) {
         const users = JSON.parse(message.data);
-        console.log('Existing users:', users);
+        console.log('Existing users in meeting:', users);
 
         for (let userId of users) {
             if (userId !== this.userId && !this.peerConnections.has(userId)) {
+                // We (the new user) initiate connections to existing users
                 this.createPeerConnection(userId, true);
             }
         }
     }
 
     async createPeerConnection(remoteUserId, initiator) {
-        console.log('Creating peer connection with:', remoteUserId, 'Initiator:', initiator);
+        console.log('Creating PC for:', remoteUserId, 'initiator:', initiator);
+        const pc = new RTCPeerConnection(this.peerConfig);
+        this.peerConnections.set(remoteUserId, pc);
 
-        const peerConnection = new RTCPeerConnection(this.peerConfig);
-        this.peerConnections.set(remoteUserId, peerConnection);
-
-        // Add local stream tracks
+        // Add tracks
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, this.localStream);
+                pc.addTrack(track, this.localStream);
             });
         }
 
-        // Handle ICE candidates
-        peerConnection.onicecandidate = (event) => {
+        pc.onicecandidate = (event) => {
             if (event.candidate) {
                 this.sendSignalingMessage({
                     type: 'ice-candidate',
@@ -222,40 +209,34 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
             }
         };
 
-        // Handle connection state changes
-        peerConnection.onconnectionstatechange = () => {
-            console.log('Connection state:', peerConnection.connectionState);
-            if (peerConnection.connectionState === 'failed' ||
-                peerConnection.connectionState === 'disconnected') {
+        pc.ontrack = (event) => {
+            console.log('Track received from:', remoteUserId);
+            if (event.streams && event.streams[0]) {
+                this.displayVideo(remoteUserId, event.streams[0]);
+            }
+        };
+
+        pc.onconnectionstatechange = () => {
+            console.log(`PC state with ${remoteUserId}: ${pc.connectionState}`);
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
                 this.handlePeerDisconnect(remoteUserId);
             }
         };
 
-         // Handle remote stream
-         peerConnection.ontrack = (event) => {
-             console.log('Received remote track:', event.track.kind, 'Streams:', event.streams.length);
-             if (event.streams && event.streams.length > 0) {
-                 this.displayVideo(remoteUserId, event.streams[0]);
-             } else {
-                 console.warn('No streams in track event');
-             }
-         };
-
-        // Create data channel for chat
+        // Data channel for chat
         if (initiator) {
-            this.createDataChannel(remoteUserId, peerConnection);
+            const dc = pc.createDataChannel('chat');
+            this.setupDataChannel(remoteUserId, dc);
         } else {
-            peerConnection.ondatachannel = (event) => {
+            pc.ondatachannel = (event) => {
                 this.setupDataChannel(remoteUserId, event.channel);
             };
         }
 
-        // Create and send offer if initiator
         if (initiator) {
             try {
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
                 this.sendSignalingMessage({
                     type: 'offer',
                     from: this.userId,
@@ -263,28 +244,25 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
                     meetingId: this.meetingId,
                     data: JSON.stringify(offer)
                 });
-            } catch (error) {
-                console.error('Error creating offer:', error);
+            } catch (e) {
+                console.error('Offer error:', e);
             }
         }
     }
 
     async handleOffer(message) {
         const remoteUserId = message.from;
-        let peerConnection = this.peerConnections.get(remoteUserId);
-
-        if (!peerConnection) {
+        let pc = this.peerConnections.get(remoteUserId);
+        if (!pc) {
             await this.createPeerConnection(remoteUserId, false);
-            peerConnection = this.peerConnections.get(remoteUserId);
+            pc = this.peerConnections.get(remoteUserId);
         }
 
         try {
             const offer = JSON.parse(message.data);
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
             this.sendSignalingMessage({
                 type: 'answer',
                 from: this.userId,
@@ -292,125 +270,81 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
                 meetingId: this.meetingId,
                 data: JSON.stringify(answer)
             });
-        } catch (error) {
-            console.error('Error handling offer:', error);
+        } catch (e) {
+            console.error('Answer error:', e);
         }
     }
 
     async handleAnswer(message) {
-        const peerConnection = this.peerConnections.get(message.from);
-        if (peerConnection) {
+        const pc = this.peerConnections.get(message.from);
+        if (pc) {
             try {
-                const answer = JSON.parse(message.data);
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-            } catch (error) {
-                console.error('Error handling answer:', error);
+                await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(message.data)));
+            } catch (e) {
+                console.error('Set remote description error:', e);
             }
         }
     }
 
     async handleIceCandidate(message) {
-        const peerConnection = this.peerConnections.get(message.from);
-        if (peerConnection) {
+        const pc = this.peerConnections.get(message.from);
+        if (pc) {
             try {
-                const candidate = JSON.parse(message.data);
-                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (error) {
-                console.error('Error adding ICE candidate:', error);
+                await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(message.data)));
+            } catch (e) {
+                console.error('Add ICE candidate error:', e);
             }
         }
     }
 
-    handleUserLeft(message) {
-        const userId = message.from;
-        this.closePeerConnection(userId);
-        this.removeVideoElement(userId);
-        this.showNotification('User left', 'info');
-    }
-
-    createDataChannel(remoteUserId, peerConnection) {
-        const dataChannel = peerConnection.createDataChannel('chat', {
-            ordered: true
-        });
-        this.setupDataChannel(remoteUserId, dataChannel);
-    }
-
-    setupDataChannel(remoteUserId, dataChannel) {
-        dataChannel.onopen = () => {
-            console.log('Data channel opened with', remoteUserId);
-        };
-
-        dataChannel.onmessage = (event) => {
-            this.displayChatMessage(remoteUserId, event.data);
-        };
-
-        dataChannel.onclose = () => {
-            console.log('Data channel closed with', remoteUserId);
-        };
-
-        dataChannel.onerror = (error) => {
-            console.error('Data channel error:', error);
-        };
-
-        this.dataChannels.set(remoteUserId, dataChannel);
+    setupDataChannel(remoteUserId, dc) {
+        this.dataChannels.set(remoteUserId, dc);
+        dc.onmessage = (e) => this.displayChatMessage(remoteUserId, e.data);
+        dc.onopen = () => console.log('DC opened with:', remoteUserId);
+        dc.onclose = () => this.dataChannels.delete(remoteUserId);
     }
 
     sendChatMessage(text) {
         if (!text.trim()) return;
-
-        // Display locally
         this.displayChatMessage('You', text);
 
-        // Send to all peers
-        let sentToSomeone = false;
-        this.dataChannels.forEach((dataChannel, userId) => {
-            if (dataChannel.readyState === 'open') {
-                dataChannel.send(text);
-                sentToSomeone = true;
+        // Try sending via DataChannels first
+        let sentCount = 0;
+        this.dataChannels.forEach((dc) => {
+            if (dc.readyState === 'open') {
+                dc.send(text);
+                sentCount++;
             }
         });
 
-        // Also send via signaling if no data channels available
-        if (!sentToSomeone) {
-            this.peerConnections.forEach((pc, userId) => {
-                this.sendSignalingMessage({
-                    type: 'chat',
-                    from: this.userId,
-                    to: userId,
-                    meetingId: this.meetingId,
-                    message: text
-                });
+        // Fallback to signaling server if any DCs are not open
+        if (sentCount < this.peerConnections.size) {
+            this.sendSignalingMessage({
+                type: 'chat',
+                from: this.userId,
+                meetingId: this.meetingId,
+                message: text
             });
         }
     }
 
     displayVideo(userId, stream, isLocal = false) {
         let videoContainer = document.getElementById('video-' + userId);
-
         if (!videoContainer) {
             videoContainer = document.createElement('div');
             videoContainer.id = 'video-' + userId;
             videoContainer.className = 'video-container';
-
             const video = document.createElement('video');
             video.autoplay = true;
             video.playsinline = true;
             if (isLocal) video.muted = true;
-
             const label = document.createElement('div');
             label.className = 'video-label';
             label.textContent = isLocal ? 'You' : 'User-' + userId.substr(5, 4);
-
-            const indicator = document.createElement('div');
-            indicator.className = 'status-indicator';
-
             videoContainer.appendChild(video);
             videoContainer.appendChild(label);
-            videoContainer.appendChild(indicator);
-
             document.getElementById('videoGrid').appendChild(videoContainer);
         }
-
         const video = videoContainer.querySelector('video');
         if (video.srcObject !== stream) {
             video.srcObject = stream;
@@ -418,17 +352,17 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
     }
 
     removeVideoElement(userId) {
-        const element = document.getElementById('video-' + userId);
-        if (element) {
-            element.remove();
-        }
+        const el = document.getElementById('video-' + userId);
+        if (el) el.remove();
     }
 
     displayChatMessage(userName, message) {
         const chatMessages = document.getElementById('chatMessages');
         const messageDiv = document.createElement('div');
         messageDiv.className = 'chat-message';
-        messageDiv.innerHTML = `<strong>${userName}:</strong> ${this.escapeHtml(message)}`;
+        // Clean up user name for display
+        const displayName = userName === 'You' ? 'You' : 'User-' + userName.substr(5, 4);
+        messageDiv.innerHTML = `<strong>${displayName}:</strong> ${this.escapeHtml(message)}`;
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
@@ -448,70 +382,44 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
     toggleVideo() {
         if (this.localStream) {
             this.videoEnabled = !this.videoEnabled;
-            this.localStream.getVideoTracks().forEach(track => {
-                track.enabled = this.videoEnabled;
-            });
-
-            const btn = document.getElementById('videoBtn');
-            btn.classList.toggle('off', !this.videoEnabled);
-            this.showNotification('Video ' + (this.videoEnabled ? 'ON' : 'OFF'), 'info');
+            this.localStream.getVideoTracks().forEach(t => t.enabled = this.videoEnabled);
+            document.getElementById('videoBtn').classList.toggle('off', !this.videoEnabled);
         }
     }
 
     toggleAudio() {
         if (this.localStream) {
             this.audioEnabled = !this.audioEnabled;
-            this.localStream.getAudioTracks().forEach(track => {
-                track.enabled = this.audioEnabled;
-            });
-
-            const btn = document.getElementById('audioBtn');
-            btn.classList.toggle('off', !this.audioEnabled);
-            this.showNotification('Audio ' + (this.audioEnabled ? 'ON' : 'OFF'), 'info');
+            this.localStream.getAudioTracks().forEach(t => t.enabled = this.audioEnabled);
+            document.getElementById('audioBtn').classList.toggle('off', !this.audioEnabled);
         }
+    }
+
+    handleUserLeft(message) {
+        const userId = message.from;
+        this.closePeerConnection(userId);
+        this.removeVideoElement(userId);
     }
 
     closePeerConnection(userId) {
-        const peerConnection = this.peerConnections.get(userId);
-        if (peerConnection) {
-            peerConnection.close();
+        const pc = this.peerConnections.get(userId);
+        if (pc) {
+            pc.close();
             this.peerConnections.delete(userId);
         }
-
-        const dataChannel = this.dataChannels.get(userId);
-        if (dataChannel) {
-            dataChannel.close();
-            this.dataChannels.delete(userId);
-        }
+        this.dataChannels.delete(userId);
     }
 
     handlePeerDisconnect(userId) {
-        console.log('Peer disconnected:', userId);
         this.closePeerConnection(userId);
         this.removeVideoElement(userId);
     }
 
     endCall() {
-        // Close all peer connections
-        this.peerConnections.forEach((pc, userId) => {
-            this.closePeerConnection(userId);
-            this.removeVideoElement(userId);
-        });
-
-        // Stop local stream
-        if (this.localStream) {
-            this.localStream.getTracks().forEach(track => track.stop());
-        }
-
-        // Close WebSocket
-        if (this.ws) {
-            this.ws.close();
-        }
-
-        this.showNotification('Call ended', 'info');
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 1000);
+        this.peerConnections.forEach((pc, id) => this.closePeerConnection(id));
+        if (this.localStream) this.localStream.getTracks().forEach(t => t.stop());
+        if (this.ws) this.ws.close();
+        window.location.href = '/';
     }
 
     showNotification(message, type = 'info') {
@@ -519,75 +427,40 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
         notification.className = 'notification';
         notification.textContent = message;
         notification.style.background = type === 'error' ? 'rgba(244, 67, 54, 0.9)' : 'rgba(0, 0, 0, 0.8)';
-
         document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
+        setTimeout(() => notification.remove(), 3000);
     }
 }
 
-// Global instance
 let client;
-
-// Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     client = new WebRTCClient();
     client.initialize();
-
-    // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'v' || e.key === 'V') toggleVideo();
-        if (e.key === 'a' || e.key === 'A') toggleAudio();
-        if (e.key === 'q' || e.key === 'Q') endCall();
-        if (e.key === 'Enter' && document.activeElement.id === 'chatInput') {
-            sendChatMessage();
-        }
+        if (e.target.tagName === 'INPUT') return;
+        if (e.key.toLowerCase() === 'v') toggleVideo();
+        if (e.key.toLowerCase() === 'a') toggleAudio();
+        if (e.key.toLowerCase() === 'q') endCall();
     });
 });
 
-// Global functions for buttons
-function toggleVideo() {
-    if (client) client.toggleVideo();
-}
-
-function toggleAudio() {
-    if (client) client.toggleAudio();
-}
-
-function endCall() {
-    if (client && confirm('Are you sure you want to end the call?')) {
-        client.endCall();
+function toggleVideo() { if (client) client.toggleVideo(); }
+function toggleAudio() { if (client) client.toggleAudio(); }
+function endCall() { if (client && confirm('End call?')) client.endCall(); }
+function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (msg && client) {
+        client.sendChatMessage(msg);
+        input.value = '';
     }
 }
-
 function copyMeetingId() {
     const meetingId = document.getElementById('meetingId').textContent;
-    // Changed to /meeting so invitees go directly to the meeting page
     const shareLink = window.location.origin + '/meeting?meetingId=' + meetingId;
-
     navigator.clipboard.writeText(shareLink).then(() => {
         const btn = document.querySelector('.copy-btn');
         btn.textContent = '✓ Copied!';
-        btn.classList.add('copied');
-        setTimeout(() => {
-            btn.textContent = 'Copy Link';
-            btn.classList.remove('copied');
-        }, 2000);
-    }).catch(err => {
-        console.error('Failed to copy:', err);
-        alert('Share link: ' + shareLink);
+        setTimeout(() => btn.textContent = 'Copy Link', 2000);
     });
-}
-
-function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-
-    if (message && client) {
-        client.sendChatMessage(message);
-        input.value = '';
-        input.focus();
-    }
 }

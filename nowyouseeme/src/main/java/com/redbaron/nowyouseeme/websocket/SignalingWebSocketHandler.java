@@ -69,36 +69,38 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
                     .add(userId);
 
         System.out.println("User " + userId + " joined meeting " + meetingId);
-        System.out.println("Users in meeting: " + meetingUsers.get(meetingId));
 
-        // Notify all participants in the meeting about the new user
+        // Send existing participants list to the new user ONLY
+        // We exclude the user's own ID from the list
         Set<String> participants = meetingUsers.get(meetingId);
         if (participants != null) {
+            Set<String> others = ConcurrentHashMap.newKeySet();
+            others.addAll(participants);
+            others.remove(userId);
+
+            SignalingMessage existingUsers = new SignalingMessage();
+            existingUsers.setType("existing-users");
+            existingUsers.setData(gson.toJson(others));
+            existingUsers.setMeetingId(meetingId);
+            existingUsers.setFrom("server");
+
+            session.sendMessage(new TextMessage(gson.toJson(existingUsers)));
+
+            // Notify others that a new user joined
             SignalingMessage joinNotif = new SignalingMessage();
             joinNotif.setType("user-joined");
             joinNotif.setFrom(userId);
             joinNotif.setMeetingId(meetingId);
-            joinNotif.setData(userId);
-
-            broadcastToMeeting(joinNotif);
-
-            // Send existing participants list to the new user
-            SignalingMessage existingUsers = new SignalingMessage();
-            existingUsers.setType("existing-users");
-            existingUsers.setData(gson.toJson(participants));
-            existingUsers.setMeetingId(meetingId);
-
-            WebSocketSession userSession = userSessions.get(userId);
-            if (userSession != null && userSession.isOpen()) {
-                userSession.sendMessage(new TextMessage(gson.toJson(existingUsers)));
-            }
+            
+            broadcastToMeetingExcept(joinNotif, userId);
         }
     }
 
     private void forwardToUser(SignalingMessage msg) throws IOException {
         String recipientId = msg.getTo();
+        if (recipientId == null) return;
+        
         WebSocketSession recipientSession = userSessions.get(recipientId);
-
         if (recipientSession != null && recipientSession.isOpen()) {
             recipientSession.sendMessage(new TextMessage(gson.toJson(msg)));
         }
@@ -119,9 +121,25 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    private void broadcastToMeetingExcept(SignalingMessage msg, String excludeUserId) throws IOException {
+        String meetingId = msg.getMeetingId();
+        Set<String> participants = meetingUsers.get(meetingId);
+
+        if (participants != null) {
+            String messageJson = gson.toJson(msg);
+            for (String userId : participants) {
+                if (!userId.equals(excludeUserId)) {
+                    WebSocketSession session = userSessions.get(userId);
+                    if (session != null && session.isOpen()) {
+                        session.sendMessage(new TextMessage(messageJson));
+                    }
+                }
+            }
+        }
+    }
+
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        // Find the user ID associated with this session
         String userId = null;
         for (Map.Entry<String, WebSocketSession> entry : userSessions.entrySet()) {
             if (entry.getValue().getId().equals(session.getId())) {
@@ -132,34 +150,23 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
 
         if (userId != null) {
             String meetingId = userMeetingMap.get(userId);
-
-            // Remove user from meeting
             if (meetingId != null) {
                 Set<String> participants = meetingUsers.get(meetingId);
                 if (participants != null) {
                     participants.remove(userId);
-
-                    // Notify remaining participants
                     SignalingMessage leaveNotif = new SignalingMessage();
                     leaveNotif.setType("user-left");
                     leaveNotif.setFrom(userId);
                     leaveNotif.setMeetingId(meetingId);
-                    leaveNotif.setData(userId);
-
                     broadcastToMeeting(leaveNotif);
 
-                    // Delete meeting if empty
                     if (participants.isEmpty()) {
                         meetingUsers.remove(meetingId);
-                        System.out.println("Meeting " + meetingId + " deleted (empty)");
                     }
                 }
             }
-
-            // Remove user
             userSessions.remove(userId);
             userMeetingMap.remove(userId);
-            System.out.println("User " + userId + " disconnected");
         }
     }
 
@@ -168,4 +175,3 @@ public class SignalingWebSocketHandler extends TextWebSocketHandler {
         System.err.println("WebSocket transport error: " + exception.getMessage());
     }
 }
-
