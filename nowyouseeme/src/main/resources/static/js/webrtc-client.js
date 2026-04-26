@@ -70,8 +70,8 @@ this.signalingServerUrl = protocol + "://" + window.location.host + "/ws/signali
             const data = await response.json();
             this.meetingId = data.meetingId;
 
-            // Update URL
-            window.history.replaceState({}, '', `/?meetingId=${this.meetingId}`);
+            // Update URL to /meeting with the new ID
+            window.history.replaceState({}, '', `/meeting?meetingId=${this.meetingId}`);
         }
 
         // Update UI safely
@@ -564,7 +564,8 @@ function endCall() {
 
 function copyMeetingId() {
     const meetingId = document.getElementById('meetingId').textContent;
-    const shareLink = window.location.origin + '/?meetingId=' + meetingId;
+    // Changed to /meeting so invitees go directly to the meeting page
+    const shareLink = window.location.origin + '/meeting?meetingId=' + meetingId;
 
     navigator.clipboard.writeText(shareLink).then(() => {
         const btn = document.querySelector('.copy-btn');
@@ -590,4 +591,3 @@ function sendChatMessage() {
         input.focus();
     }
 }
-

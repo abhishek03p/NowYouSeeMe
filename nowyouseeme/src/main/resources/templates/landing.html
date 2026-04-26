@@ -173,7 +173,7 @@
             <p>Video calling made simple</p>
         </div>
 
-        <div class="options">
+        <div class="options" id="optionsContainer">
             <div class="option-card" onclick="startNewMeeting()">
                 <h2>➕ Start New Meeting</h2>
                 <p>Create a new meeting room and invite others</p>
@@ -204,13 +204,23 @@
 
         <div class="loading" id="loadingState">
             <div class="spinner"></div>
-            Preparing meeting...
+            <span id="loadingText">Preparing meeting...</span>
         </div>
     </div>
 
     <script>
+        // Check if redirected with a meetingId
+        window.onload = function() {
+            const params = new URLSearchParams(window.location.search);
+            const meetingId = params.get('meetingId');
+            if (meetingId) {
+                showLoading(true, 'Joining meeting...');
+                verifyAndJoin(meetingId);
+            }
+        };
+
         function startNewMeeting() {
-            showLoading(true);
+            showLoading(true, 'Creating meeting...');
 
             fetch('/api/meetings/create', {
                 method: 'POST',
@@ -242,8 +252,11 @@
                 return;
             }
 
-            showLoading(true);
+            showLoading(true, 'Joining meeting...');
+            verifyAndJoin(code);
+        }
 
+        function verifyAndJoin(code) {
             // Verify meeting exists
             fetch(`/api/meetings/${code}/exists`)
                 .then(res => res.json())
@@ -254,6 +267,8 @@
                         showLoading(false);
                         showError('Meeting not found. Please check the code.');
                         document.getElementById('meetingCode').value = '';
+                        // Clear the URL if it had an invalid meetingId
+                        window.history.replaceState({}, document.title, "/");
                     }
                 })
                 .catch(err => {
@@ -270,12 +285,14 @@
             }, 5000);
         }
 
-        function showLoading(show) {
+        function showLoading(show, text) {
             document.getElementById('loadingState').style.display = show ? 'flex' : 'none';
-            document.querySelector('.options').style.display = show ? 'none' : 'flex';
-            document.getElementById('joinSection').style.display = show ? 'none' : 'none';
+            document.getElementById('optionsContainer').style.display = show ? 'none' : 'flex';
+            document.getElementById('joinSection').style.display = 'none';
+            if (text) {
+                document.getElementById('loadingText').textContent = text;
+            }
         }
     </script>
 </body>
 </html>
-
