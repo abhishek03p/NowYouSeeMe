@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Now You See Me - Video Calling</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75' fill='%23764ba2'>🎥</text></svg>">
     <!-- Adding FontAwesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -231,10 +233,30 @@
             justify-content: flex-end;
         }
 
-        .gif-message {
-            width: 100%;
+        .file-message-content {
+            margin-top: 8px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 8px;
-            margin-top: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .file-message-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        .file-message-content a {
+            color: var(--accent-hover);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .file-message-content a:hover {
+            text-decoration: underline;
         }
 
         /* Chat Input Tools */
@@ -308,7 +330,7 @@
             transform: scale(1.05);
         }
 
-        /* Panels for Emojis and GIFs */
+        /* Panels for Emojis */
         .expansion-panel {
             position: static;
             width: calc(100% - 20px);
@@ -330,25 +352,6 @@
             overflow-y: auto;
         }
 
-        .emoji-search-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .search-status {
-            width: 20px;
-            text-align: center;
-            color: var(--text-dim);
-            opacity: 0;
-            transition: opacity 0.2s ease;
-        }
-
-        .search-status.visible {
-            opacity: 1;
-        }
-
         .emoji-item {
             font-size: 20px;
             cursor: pointer;
@@ -359,38 +362,6 @@
 
         .emoji-item:hover {
             background: rgba(255,255,255,0.1);
-        }
-
-        .gif-search-container {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .gif-search-input {
-            width: 100%;
-            padding: 8px 12px;
-            border-radius: 20px;
-            border: none;
-            background: rgba(255,255,255,0.1);
-            color: white;
-            font-size: 13px;
-        }
-
-        .gif-results {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 8px;
-            max-height: 250px;
-            overflow-y: auto;
-        }
-
-        .gif-item {
-            width: 100%;
-            height: 100px;
-            object-fit: cover;
-            border-radius: 6px;
-            cursor: pointer;
         }
 
         /* Controls */
@@ -465,83 +436,6 @@
 
         .notification.info {
             border-left-color: var(--accent-color);
-        }
-
-        .lobby-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.72);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1200;
-            padding: 20px;
-        }
-
-        .lobby-card {
-            background: #1e1e2e;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 14px;
-            padding: 20px;
-            width: min(420px, 92vw);
-            text-align: center;
-        }
-
-        .host-lobby-panel {
-            display: none;
-            background: rgba(0, 0, 0, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 10px;
-            padding: 10px;
-            margin: 0 15px 10px;
-        }
-
-        .host-lobby-title {
-            font-size: 12px;
-            color: var(--text-dim);
-            margin-bottom: 8px;
-        }
-
-        .host-request-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-            font-size: 13px;
-        }
-
-        .host-request-item:last-child {
-            border-bottom: none;
-        }
-
-        .host-request-actions {
-            display: flex;
-            gap: 6px;
-        }
-
-        .host-action-btn {
-            border: none;
-            border-radius: 16px;
-            padding: 5px 10px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        .host-action-btn.allow {
-            background: #2e7d32;
-        }
-
-        .host-action-btn.deny {
-            background: #c62828;
-        }
-
-        .host-empty {
-            font-size: 12px;
-            color: var(--text-dim);
-            opacity: 0.85;
         }
 
         @keyframes slideIn {
@@ -656,14 +550,6 @@
     </style>
 </head>
 <body>
-    <div id="lobbyWaiting" class="lobby-overlay">
-        <div class="lobby-card">
-            <h3>Waiting for host approval</h3>
-            <p style="margin-top:8px; color:#b0b0b0;">You are in the lobby. The host must admit you before joining the meeting.</p>
-            <div style="margin-top:14px;"><i class="fas fa-spinner fa-spin"></i></div>
-        </div>
-    </div>
-
     <div class="container">
         <div class="header">
             <h1><i class="fas fa-video"></i> NYSM</h1>
@@ -684,11 +570,6 @@
                     <i class="fas fa-chevron-down" style="cursor: pointer; opacity: 0.5;"></i>
                 </div>
 
-                <div id="hostLobbyPanel" class="host-lobby-panel">
-                    <div class="host-lobby-title">Pending join requests</div>
-                    <div id="hostPendingList"></div>
-                </div>
-
                 <div class="chat-messages" id="chatMessages">
                     <!-- Example Bubble -->
                     <div class="message-bubble received">
@@ -699,35 +580,17 @@
 
                 <!-- Expansion Panels -->
                 <div id="emojiPanel" class="expansion-panel">
-                    <div class="emoji-search-row">
-                        <input type="text" class="gif-search-input" id="emojiSearchInput" placeholder="Search emojis...">
-                        <span id="emojiSearchStatus" class="search-status" aria-label="Loading emojis">
-                            <i class="fas fa-spinner fa-spin"></i>
-                        </span>
-                    </div>
-                    <div class="emoji-grid" id="emojiGrid">
-                        <div style="grid-column: 1 / -1; opacity:0.75; font-size:12px;">Start typing to search emojis.</div>
-                    </div>
-                </div>
-
-                <div id="gifPanel" class="expansion-panel">
-                    <div class="gif-search-container">
-                        <input type="text" class="gif-search-input" id="gifSearchInput" placeholder="Search GIFs on Google..." onkeypress="if(event.key==='Enter'){performGifGoogleSearch();}">
-                        <button class="btn" type="button" onclick="performGifGoogleSearch()">Search on Google</button>
-                        <div class="gif-results" id="gifResults" style="display:block;"></div>
-                    </div>
+                    <div class="emoji-grid" id="emojiGrid"></div>
                 </div>
 
                 <div class="chat-tools">
                     <button class="tool-btn" onclick="togglePanel('emojiPanel')" title="Emojis">
                         <i class="far fa-smile"></i>
                     </button>
-                    <button class="tool-btn" onclick="togglePanel('gifPanel')" title="GIFs">
-                        <i class="fas fa-film"></i>
+                    <button class="tool-btn" onclick="triggerFileInput()" title="Share File">
+                        <i class="fas fa-paperclip"></i>
                     </button>
-                    <button class="tool-btn" onclick="showToolInfo()" title="Extra options">
-                        <i class="far fa-sticky-note"></i>
-                    </button>
+                    <input type="file" id="fileInput" style="display: none;">
                 </div>
 
                 <div class="chat-input-area">
@@ -757,23 +620,15 @@
     <script src="/js/webrtc-client.js"></script>
     <script th:inline="javascript">
         // UI specific logic
-        const EMOJI_API_URL = 'https://emoji-api.com/emojis';
-        const EMOJI_API_ACCESS_KEY = /*[[${emojiApiAccessKey}]]*/ '';
-
         function togglePanel(panelId) {
-            const panels = ['emojiPanel', 'gifPanel'];
+            const panels = ['emojiPanel']; // Only emoji panel now
             panels.forEach(p => {
                 const el = document.getElementById(p);
                 if (p === panelId) {
                     const shouldShow = el.style.display !== 'block';
                     el.style.display = shouldShow ? 'block' : 'none';
                     if (p === 'emojiPanel' && shouldShow) {
-                        const query = emojiSearchInput.value.trim();
-                        if (query) {
-                            fetchEmojis(query);
-                        } else {
-                            renderEmojiGrid(allEmojisCache);
-                        }
+                        renderEmojiGrid(emojis); // Render static emojis
                     }
                 } else {
                     el.style.display = 'none';
@@ -781,174 +636,29 @@
             });
         }
 
-        function showToolInfo() {
-            if (window.client) {
-                window.client.showNotification('Stickers and extra tools coming soon.', 'info');
-            }
-        }
-
-        const emojiSearchInput = document.getElementById('emojiSearchInput');
+        // Static Emojis
+        const emojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','🤨','🧐','🤓'];
         const emojiGrid = document.getElementById('emojiGrid');
-        const emojiSearchStatus = document.getElementById('emojiSearchStatus');
-        let emojiTimeout;
-        let emojiAbortController;
-        let emojiRequestId = 0;
-        let allEmojisCache = [];
-        let isAllEmojisLoaded = false;
 
-        emojiSearchInput.oninput = () => {
-            clearTimeout(emojiTimeout);
-            const query = emojiSearchInput.value.trim();
-            if (!query) {
-                setEmojiProcessing(false);
-                renderEmojiGrid(allEmojisCache);
-                return;
-            }
-            setEmojiProcessing(true);
-            emojiTimeout = setTimeout(() => {
-                const query = emojiSearchInput.value.trim();
-                fetchEmojis(query);
-            }, 350);
-        };
-
-        function setEmojiProcessing(isProcessing) {
-            if (isProcessing) {
-                emojiSearchStatus.classList.add('visible');
-            } else {
-                emojiSearchStatus.classList.remove('visible');
-            }
-        }
-
-        async function fetchEmojis(query) {
-            if (!query) {
-                setEmojiProcessing(false);
-                renderEmojiGrid(allEmojisCache);
-                return;
-            }
-            emojiGrid.innerHTML = '<div style="opacity:0.7;font-size:12px;">Loading emojis...</div>';
-            setEmojiProcessing(true);
-            if (!EMOJI_API_ACCESS_KEY) {
-                emojiGrid.innerHTML = '<div style="opacity:0.8;font-size:12px;">Add `emoji.api.access-key` in application.properties to load emojis.</div>';
-                setEmojiProcessing(false);
-                return;
-            }
-
-            if (emojiAbortController) {
-                emojiAbortController.abort();
-            }
-            emojiAbortController = new AbortController();
-            const requestId = ++emojiRequestId;
-
-            try {
-                const url = query
-                    ? `${EMOJI_API_URL}?search=${encodeURIComponent(query)}&access_key=${encodeURIComponent(EMOJI_API_ACCESS_KEY)}`
-                    : `${EMOJI_API_URL}?access_key=${encodeURIComponent(EMOJI_API_ACCESS_KEY)}`;
-                const res = await fetch(url, { signal: emojiAbortController.signal });
-                if (!res.ok) {
-                    throw new Error('Emoji service unavailable right now');
-                }
-
-                const data = await res.json();
-                if (requestId !== emojiRequestId) {
-                    return;
-                }
-                if (!Array.isArray(data) || data.length === 0) {
-                    emojiGrid.innerHTML = '<div style="opacity:0.7;font-size:12px;">No emojis found for this search.</div>';
-                    return;
-                }
-
-                renderEmojiGrid(data);
-            } catch (e) {
-                if (e.name === 'AbortError') {
-                    return;
-                }
-                console.error(e);
-                emojiGrid.innerHTML = '<div style="opacity:0.8;font-size:12px;">Could not load emojis. Please verify your Emoji API key.</div>';
-                if (window.client) {
-                    window.client.showNotification(e.message, 'error');
-                }
-            } finally {
-                if (requestId === emojiRequestId) {
-                    setEmojiProcessing(false);
-                }
-            }
-        }
-
-        function renderEmojiGrid(emojis) {
+        function renderEmojiGrid(emojisToRender) {
             emojiGrid.innerHTML = '';
-            if (!Array.isArray(emojis) || emojis.length === 0) {
-                emojiGrid.innerHTML = '<div style="grid-column: 1 / -1; opacity:0.75; font-size:12px;">Loading all emojis...</div>';
-                return;
-            }
-
-            emojis.forEach(item => {
+            emojisToRender.forEach(emoji => {
                 const span = document.createElement('span');
                 span.className = 'emoji-item';
-                span.textContent = item.character || '';
-                span.title = item.unicodeName || 'emoji';
+                span.textContent = emoji;
                 span.onclick = () => {
                     const input = document.getElementById('chatInput');
-                    input.value += span.textContent;
+                    input.value += emoji;
                     input.focus();
                 };
                 emojiGrid.appendChild(span);
             });
         }
 
-        async function preloadAllEmojis() {
-            if (isAllEmojisLoaded) {
-                return;
-            }
-            if (!EMOJI_API_ACCESS_KEY) {
-                emojiGrid.innerHTML = '<div style="grid-column: 1 / -1; opacity:0.8; font-size:12px;">Add `emoji.api.access-key` in application.properties to load emojis.</div>';
-                return;
-            }
+        // Initial render of emojis when panel is first opened
+        // Or you can call renderEmojiGrid(emojis) directly here if you want it always visible
+        // For now, it will render when togglePanel('emojiPanel') is called.
 
-            setEmojiProcessing(true);
-            try {
-                const res = await fetch(`${EMOJI_API_URL}?access_key=${encodeURIComponent(EMOJI_API_ACCESS_KEY)}`);
-                if (!res.ok) {
-                    throw new Error('Emoji service unavailable right now');
-                }
-
-                const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) {
-                    allEmojisCache = data;
-                    isAllEmojisLoaded = true;
-                    if (!emojiSearchInput.value.trim()) {
-                        renderEmojiGrid(allEmojisCache);
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-                emojiGrid.innerHTML = '<div style="grid-column: 1 / -1; opacity:0.8; font-size:12px;">Could not load default emojis.</div>';
-                if (window.client) {
-                    window.client.showNotification('Could not preload default emojis', 'error');
-                }
-            } finally {
-                setEmojiProcessing(false);
-            }
-        }
-
-        preloadAllEmojis();
-
-        // GIF search fallback without API key
-        function performGifGoogleSearch() {
-            const gifSearchInput = document.getElementById('gifSearchInput');
-            const query = gifSearchInput.value.trim();
-            if (!query) {
-                if (window.client) {
-                    window.client.showNotification('Enter a keyword to search GIFs.', 'info');
-                }
-                return;
-            }
-
-            const googleGifUrl = `https://www.google.com/search?tbm=isch&tbs=itp:animated&q=${encodeURIComponent(query + ' gif')}`;
-            window.open(googleGifUrl, '_blank', 'noopener,noreferrer');
-            if (window.client) {
-                window.client.showNotification('Opened Google GIF results in a new tab.', 'success');
-            }
-        }
     </script>
 </body>
 </html>

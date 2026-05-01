@@ -1,0 +1,8 @@
+
+The following files have been resolved:
+   org.springframework.boot:spring-boot-starter-web:jar:3.2.4:compile[36m -- module spring.boot.starter.web[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter-websocket:jar:3.2.4:compile[36m -- module spring.boot.starter.websocket[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter-thymeleaf:jar:3.2.4:compile[36m -- module spring.boot.starter.thymeleaf[0;1m [auto][m
+   com.google.code.gson:gson:jar:2.10.1:compile[36m -- module com.google.gson[m
+   org.springframework.boot:spring-boot-starter-test:jar:3.2.4:test[36m -- module spring.boot.starter.test[0;1m [auto][m
+
