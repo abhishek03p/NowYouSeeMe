@@ -53,7 +53,11 @@ class WebRTCClient {
         if (chatInput) {
             chatInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
-                    sendChatMessage();
+                    const msg = chatInput.value.trim();
+                    if (msg) {
+                        this.sendChatMessage(msg);
+                        chatInput.value = '';
+                    }
                 }
             });
         }
@@ -191,6 +195,7 @@ class WebRTCClient {
     async createPeerConnection(remoteUserId, initiator) {
         console.log(`PC: Creating RTCPeerConnection for ${remoteUserId}, initiator: ${initiator}`);
         const pc = new RTCPeerConnection(this.peerConfig);
+        pc.iceCandidateQueue = [];
         this.peerConnections.set(remoteUserId, pc);
 
         // Add local stream tracks
@@ -260,16 +265,15 @@ class WebRTCClient {
             }
         };
 
-        // Data channel for chat
-        const chatDc = pc.createDataChannel('chat');
-        this.setupDataChannel(remoteUserId, chatDc, 'chat');
+        // Data channel logic
+        if (initiator) {
+            const chatDc = pc.createDataChannel('chat');
+            this.setupDataChannel(remoteUserId, chatDc, 'chat');
 
-        // Data channel for file transfer
-        const fileDc = pc.createDataChannel('file');
-        this.setupDataChannel(remoteUserId, fileDc, 'file');
-
-        // Handle incoming data channels (for non-initiator)
-        if (!initiator) {
+            const fileDc = pc.createDataChannel('file');
+            this.setupDataChannel(remoteUserId, fileDc, 'file');
+        } else {
+            // Handle incoming data channels (for non-initiator)
             pc.ondatachannel = (event) => {
                 if (event.channel.label === 'chat') {
                     console.log(`PC: Received chat DataChannel from ${remoteUserId}.`);
@@ -294,6 +298,7 @@ class WebRTCClient {
             const offer = JSON.parse(message.data);
             console.log(`PC: Setting remote description (offer) from ${remoteUserId}.`);
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            this.processIceQueue(pc);
             console.log(`PC: Creating answer for ${remoteUserId}.`);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
@@ -311,6 +316,7 @@ class WebRTCClient {
             try {
                 console.log(`PC: Setting remote description (answer) from ${message.from}.`);
                 await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(message.data)));
+                this.processIceQueue(pc);
             } catch (e) { console.error(`PC: Error handling answer from ${message.from}:`, e); }
         } else {
             console.warn(`PC: Received answer from ${message.from} but no peer connection found.`);
@@ -321,11 +327,32 @@ class WebRTCClient {
         const pc = this.peerConnections.get(message.from);
         if (pc) {
             try {
-                console.log(`PC: Adding ICE candidate from ${message.from}.`);
-                await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(message.data)));
-            } catch (e) { console.error(`PC: Error adding ICE candidate from ${message.from}:`, e); }
+                const candidate = new RTCIceCandidate(JSON.parse(message.data));
+                if (pc.remoteDescription && pc.remoteDescription.type) {
+                    console.log(`PC: Adding ICE candidate from ${message.from}.`);
+                    await pc.addIceCandidate(candidate);
+                } else {
+                    console.log(`PC: Queuing ICE candidate from ${message.from} until remoteDescription is set.`);
+                    if (!pc.iceCandidateQueue) pc.iceCandidateQueue = [];
+                    pc.iceCandidateQueue.push(candidate);
+                }
+            } catch (e) { console.error(`PC: Error handling ICE candidate from ${message.from}:`, e); }
         } else {
             console.warn(`PC: Received ICE candidate from ${message.from} but no peer connection found.`);
+        }
+    }
+
+    async processIceQueue(pc) {
+        if (pc.iceCandidateQueue && pc.iceCandidateQueue.length > 0) {
+            console.log(`PC: Processing ${pc.iceCandidateQueue.length} queued ICE candidates.`);
+            for (const candidate of pc.iceCandidateQueue) {
+                try {
+                    await pc.addIceCandidate(candidate);
+                } catch (e) {
+                    console.error(`PC: Error adding queued ICE candidate:`, e);
+                }
+            }
+            pc.iceCandidateQueue = [];
         }
     }
 
@@ -366,17 +393,12 @@ class WebRTCClient {
             }
         });
 
-        // Fallback to signaling server if no data channels are open
-        if (sentCount === 0 && this.peerConnections.size > 0) {
-             this.sendSignalingMessage({
-                type: 'chat', from: this.userId,
-                meetingId: this.meetingId, message: text
-            });
-            console.log(`Chat: Sent message via signaling (no open DataChannels).`);
-        } else if (sentCount > 0) {
+        if (sentCount > 0) {
             console.log(`Chat: Sent message via ${sentCount} DataChannels.`);
+        } else if (this.peerConnections.size > 0) {
+            console.warn(`Chat: Message could not be sent. No open DataChannels.`);
         } else {
-            console.warn(`Chat: Message not sent. No open DataChannels or peer connections.`);
+            console.warn(`Chat: Message not sent. No peer connections.`);
         }
     }
 
@@ -708,18 +730,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Global functions for HTML event handlers
-function toggleVideo() { if (client) client.toggleVideo(); }
-function toggleAudio() { if (client) client.toggleAudio(); }
-function endCall() { if (client && confirm('Leave meeting?')) client.endCall(); }
-function sendChatMessage() {
+window.toggleVideo = function() { if (client) client.toggleVideo(); };
+window.toggleAudio = function() { if (client) client.toggleAudio(); };
+window.endCall = function() { if (client && confirm('Leave meeting?')) client.endCall(); };
+window.sendChatMessage = function() {
     const input = document.getElementById('chatInput');
     const msg = input.value.trim();
     if (msg) {
         client.sendChatMessage(msg);
         input.value = '';
     }
-}
-function copyMeetingId() {
+};
+window.copyMeetingId = function() {
     const id = document.getElementById('meetingId').textContent;
     const url = window.location.origin + '/meeting?meetingId=' + id;
     navigator.clipboard.writeText(url).then(() => {
@@ -730,13 +752,13 @@ function copyMeetingId() {
         console.error('Failed to copy:', err);
         alert('Share link: ' + url); // Fallback for browsers that don't support clipboard API
     });
-}
+};
 
 window.triggerFileInput = function() {
     document.getElementById('fileInput').click();
 };
 
-function togglePanel(panelId) {
+window.togglePanel = function(panelId) {
     const panels = ['emojiPanel']; // Only emoji panel now
     panels.forEach(p => {
         const el = document.getElementById(p);
@@ -750,7 +772,7 @@ function togglePanel(panelId) {
             el.style.display = 'none';
         }
     });
-}
+};
 
 // Static Emojis
 const emojis = ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','🤨','🧐','🤓'];
